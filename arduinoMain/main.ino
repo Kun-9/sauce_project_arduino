@@ -4,6 +4,7 @@
 
 #define VACUUM_PIN 13
 #define EXHALE_PIN 7
+#define VIBRATION_PIN 30
 
 // loadcell_2
 #define LOADCELL_DOUT_PIN 2
@@ -83,6 +84,11 @@ void coverMotor(String status) {
   }
 }
 
+void vibrationMotor(int pwm) {
+  analogWrite(VIBRATION_PIN, pwm);
+  Serial.print("vibrationMotor value : ");
+  Serial.println(pwm);
+}
 
 class LoadCell {
   private:
@@ -202,6 +208,7 @@ void loop() {
 
   int Source_arr[3] = {3, 4, 6};
   int goal_weight[3] = {30, 10, 50};
+  boolean isLiquid[3] = {true, true, false};
 
   int n = (int)(sizeof(Source_arr) / sizeof(int));
 
@@ -214,31 +221,44 @@ void loop() {
     delay(1000);
     
     coverMotor("open");
-    exhale(255);
+
+    if (isLiquid[i]) {
+      Serial.println("Liquid");
+      exhale(255);
+    } else {
+      Serial.println("not Liquid");
+      vibrationMotor(255);
+    }
 
     // reset
     double Weight = 0;
     scale1.tare();
     scale2.tare();
-    Serial.print("Measuring the weight.");
+    Serial.println("Measuring the weight.");
     while(Weight < goal_weight[i]) {
        Weight = scale1.get_units() + scale2.get_units();
       //  Serial.println(Weight);
     }
-    Serial.println(Weight);
+    Serial.print(Weight);
+    Serial.println("g");
     Serial.print("Measuring is over.");
-    vacuum(255);
-    exhale(0);
 
-    delay(1000);
-
-    coverMotor("close");
-    vacuum(0);
+    if (isLiquid[i]) {
+      vacuum(255);
+      exhale(0);
+      coverMotor("close");
+      vacuum(0);
+    } else {
+      vibrationMotor(0);
+      coverMotor("close");
+    }
 
     moduleServo.up();
 
-    delay(1000);
+    delay(5000);
   }
+
+  movecartridge.move(1);
 
   Serial.println("End cycle");
   delay(5000);
