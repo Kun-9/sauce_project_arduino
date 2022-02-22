@@ -27,6 +27,7 @@ private:
   Servo servo;
   
 public:
+
   customServo(int downAngle, int upAngle, Servo servo) {
     this->downAngle = downAngle;
     this->upAngle = upAngle;
@@ -44,15 +45,33 @@ public:
   }
 };
 
-class moveCartridge {
+class moveCartridge : public Stepper {
   private:
     int current_num = 1;
     int move_num;
-
+    // Stepper shaftStep;
   public:
+    moveCartridge(int number_of_steps, int motor_pin_1, int motor_pin_2) 
+                                 : Stepper(number_of_steps, motor_pin_1, motor_pin_2){}       
+    moveCartridge(int number_of_steps, int motor_pin_1, int motor_pin_2, int motor_pin_3, int motor_pin_4) 
+                                 : Stepper(number_of_steps, motor_pin_1, motor_pin_2, motor_pin_3, motor_pin_4){}
+    moveCartridge(int number_of_steps, int motor_pin_1, int motor_pin_2, int motor_pin_3, int motor_pin_4, int motor_pin_5) 
+                                 : Stepper(number_of_steps, motor_pin_1, motor_pin_2, motor_pin_3, motor_pin_4, motor_pin_5){}
+   
+    // moveCartridge(Stepper stepper) {
+    //   shaftStep = stepper;
+    // }
+
     boolean move(int move_num) {
 
       this -> move_num = move_num;
+      int tmp = move_num - current_num;
+
+      // move
+      for(int i = 0; i < tmp ; i ++) {
+        step(-200/6);
+      }
+
       /*
         move funtion
       */
@@ -131,7 +150,7 @@ class LoadCell {
 int calibration_factor = -480;
 int calibration_factor2 = -480; // hx -711 두개를 사용 시 더 추가
 
-Stepper myStepper1(200, 12, 11, 10, 9);      
+// Stepper shaftStep = Stepper(200, 12, 11, 10, 9);      
 Servo servo1;
 
 
@@ -147,7 +166,7 @@ void setup() {
   pinMode(VACUUM_PIN, OUTPUT);
 
   // StepMotor setting
-  myStepper1.setSpeed(70); // 분당 스텝수 설정  --> 스텝모터의 속도를 결정한다. 
+  // shaftStep.setSpeed(70); // 분당 스텝수 설정  --> 스텝모터의 속도를 결정한다. 
   
   
   // LoadCell1 setting
@@ -165,7 +184,7 @@ void setup() {
   // Serial.println(zero_factor);
 }
 
-// myStepper1.step(-200/6);
+// shaftStep.step(-200/6);
 // turn counterclockwise 60 degrees.
 /*
  *
@@ -198,8 +217,10 @@ void loop() {
   scale1.set_scale(calibration_factor);
   scale2.set_scale(calibration_factor2);
   
+  // down angle, up angle
   customServo moduleServo = customServo(70, 120, servo1);
-  moveCartridge movecartridge ;
+  moveCartridge movecartridge = moveCartridge(200, 12, 11, 10, 9) ;
+  movecartridge.setSpeed(70);
   // LoadCell loadcell = LoadCell(scale1, scale2, calibration_factor, calibration_factor2);
 
   ////////////////////////// start /////////////////////////////////////////
@@ -213,7 +234,6 @@ void loop() {
   int n = (int)(sizeof(Source_arr) / sizeof(int));
 
   /////////////////////////////////////////////////
-
   for (int i = 0 ; i < n ; i++) {
     movecartridge.move(Source_arr[i]);
     delay(1000);
