@@ -3,7 +3,7 @@
 #include "HX711.h" 
 
 #define VACUUM_PIN 13
-#define EXHALE_PIN 7
+#define AIRPUMP_PIN 7
 #define VIBRATION_PIN 30
 
 // loadcell_2
@@ -17,8 +17,13 @@
 // ModuleServo
 #define MODULE_SERVO_PIN 8
 
-HX711 scale1;
-HX711 scale2;
+// StepMoter
+#define A 9
+#define A_ 10
+#define B 11
+#define B_ 12
+
+
 
 class customServo {
 private:
@@ -57,10 +62,6 @@ class moveCartridge : public Stepper {
                                  : Stepper(number_of_steps, motor_pin_1, motor_pin_2, motor_pin_3, motor_pin_4){}
     moveCartridge(int number_of_steps, int motor_pin_1, int motor_pin_2, int motor_pin_3, int motor_pin_4, int motor_pin_5) 
                                  : Stepper(number_of_steps, motor_pin_1, motor_pin_2, motor_pin_3, motor_pin_4, motor_pin_5){}
-   
-    // moveCartridge(Stepper stepper) {
-    //   shaftStep = stepper;
-    // }
 
     boolean move(int move_num) {
 
@@ -83,15 +84,15 @@ class moveCartridge : public Stepper {
     }
 };
 
-void vacuum(int pwm) {
+void vacuumMotor(int pwm) {
   analogWrite(VACUUM_PIN, pwm);
-  Serial.print("vacuum value : ");
+  Serial.print("vacuum Motor value : ");
   Serial.println(pwm);
 }
 
-void exhale(int pwm) {
-  analogWrite(EXHALE_PIN, pwm);
-  Serial.print("exhale value : ");
+void airpumpMotor(int pwm) {
+  analogWrite(AIRPUMP_PIN, pwm);
+  Serial.print("airpump Motor value : ");
   Serial.println(pwm);
 }
 
@@ -139,19 +140,19 @@ class LoadCell {
     }
   };
 
-// double getWeight() {
-
-  // double sumWeight = scale1.get_units() + scale2.get_units();
-
-  // return sumWeight;
-// }
-
 // LoadCell calibration
 int calibration_factor = -480;
-int calibration_factor2 = -480; // hx -711 두개를 사용 시 더 추가
+int calibration_factor2 = -480;
 
 // Stepper shaftStep = Stepper(200, 12, 11, 10, 9);      
+
+HX711 scale1;
+HX711 scale2;
+
+// down angle, up angle
 Servo servo1;
+customServo moduleServo = customServo(70, 120, servo1);
+moveCartridge movecartridge = moveCartridge(200, B_, B, A_, A) ;
 
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -162,11 +163,10 @@ void setup() {
   // Module servoMotor setting
   servo1.attach(MODULE_SERVO_PIN);
   pinMode(MODULE_SERVO_PIN, OUTPUT);
-  pinMode(EXHALE_PIN, OUTPUT);
+  pinMode(AIRPUMP_PIN, OUTPUT);
   pinMode(VACUUM_PIN, OUTPUT);
 
-  // StepMotor setting
-  // shaftStep.setSpeed(70); // 분당 스텝수 설정  --> 스텝모터의 속도를 결정한다. 
+  // shaftStep.setSpeed(70);
   
   
   // LoadCell1 setting
@@ -206,7 +206,7 @@ void setup() {
 // module servoMotor
 // shaft stepMotor
 // loadcell
-// vucuum, exhale motor
+// vucuum, airpumpMotor motor
 // vibration motor
 // ----------------------------
 // cover servoMotor
@@ -217,10 +217,9 @@ void loop() {
   scale1.set_scale(calibration_factor);
   scale2.set_scale(calibration_factor2);
   
-  // down angle, up angle
-  customServo moduleServo = customServo(70, 120, servo1);
-  moveCartridge movecartridge = moveCartridge(200, 12, 11, 10, 9) ;
+  // StepMotor setting
   movecartridge.setSpeed(70);
+
   // LoadCell loadcell = LoadCell(scale1, scale2, calibration_factor, calibration_factor2);
 
   ////////////////////////// start /////////////////////////////////////////
@@ -235,8 +234,10 @@ void loop() {
 
   /////////////////////////////////////////////////
   for (int i = 0 ; i < n ; i++) {
+
     movecartridge.move(Source_arr[i]);
     delay(1000);
+
     moduleServo.down();
     delay(1000);
     
@@ -244,16 +245,18 @@ void loop() {
 
     if (isLiquid[i]) {
       Serial.println("Liquid");
-      exhale(255);
+      airpumpMotor(255);
     } else {
       Serial.println("not Liquid");
       vibrationMotor(255);
     }
 
-    // reset
+    // Reset LoadCell //
     double Weight = 0;
     scale1.tare();
     scale2.tare();
+    ////////////////////
+
     Serial.println("Measuring the weight.");
     while(Weight < goal_weight[i]) {
        Weight = scale1.get_units() + scale2.get_units();
@@ -264,10 +267,10 @@ void loop() {
     Serial.print("Measuring is over.");
 
     if (isLiquid[i]) {
-      vacuum(255);
-      exhale(0);
+      vacuumMotor(255);
+      airpumpMotor(0);
       coverMotor("close");
-      vacuum(0);
+      vacuumMotor(0);
     } else {
       vibrationMotor(0);
       coverMotor("close");
