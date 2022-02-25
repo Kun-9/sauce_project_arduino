@@ -1,6 +1,15 @@
-#include <Servo.h>
+#include "stdio.h"
 #include <Stepper.h>
 #include "HX711.h" 
+#include "string.h"
+#include "Servo.h"
+// #include <iostream>
+// #include <string>
+// #include <vector>
+// #include <sstream>
+// #include <typeinfo>
+// using namespace std;
+
 
 #define VACUUM_PIN 13
 #define AIRPUMP_PIN 7
@@ -23,6 +32,7 @@
 #define B 11
 #define B_ 12
 
+String str = "";
 
 
 class customServo {
@@ -152,13 +162,14 @@ HX711 scale2;
 // down angle, up angle
 Servo servo1;
 customServo moduleServo = customServo(70, 120, servo1);
-moveCartridge movecartridge = moveCartridge(200, B_, B, A_, A) ;
+moveCartridge movecartridge = moveCartridge(200, A, A_, B, B_) ;
+// moveCartridge movecartridge = moveCartridge(200, B_, B, A_, A) ;
 
 
 //////////////////////////////////////////////////////////////////////////////////
 void setup() {
   // Serial setting
-  Serial.begin(19200);          
+  Serial.begin(9600);          
 
   // Module servoMotor setting
   servo1.attach(MODULE_SERVO_PIN);
@@ -213,6 +224,65 @@ void setup() {
 // 
 
 void loop() {
+  
+  while(Serial.available() == 0) {
+  }
+
+//  while(Serial.available() != 0){
+    str = Serial.readString();
+    
+//  }
+  Serial.println("end");
+  Serial.println(str);
+
+  
+  // int str2 = Serial.read();
+  // String str= "3 5 7 0 0 0,40 50 20 0 0 0,1 0 1 0 0 0";
+
+  
+
+  /*
+  int first = str.indexOf(",");
+  int second = str.indexOf(",", first+1);
+  int StrLength = str.length();
+
+  String firstStr = str.substring(0, first);
+  String SecondStr = str.substring(first+1, second);
+  String LastStr = str.substring(second+1, StrLength);
+
+  int source_info[3][6];
+  
+
+  for (int i = 0; i < 6; i++) {
+  
+    char tmp = firstStr.charAt(2*i);
+    
+    source_info[0][i] = tmp;
+    Serial.println(tmp);
+  }
+*/
+  /*
+    int temp = 0;
+    int point = str.indexOf(" ");
+    String tok = SecondStr.substring(0,point);
+    Serial.println(tok);
+    Serial.println(point);
+    int point2 = str.indexOf(" ", point+1);
+    String tok2 = str.substring(point+1, point2);
+
+    Serial.println(tok2);
+    Serial.println(point2);
+
+    temp = point;
+  
+  Serial.println(firstStr);
+  Serial.println(SecondStr);
+  Serial.println(LastStr);
+  */
+  // String str="3 5 7 0 0 0,40 50 20 0 0 0,1 0 1 0 0 0";
+
+
+
 
   scale1.set_scale(calibration_factor);
   scale2.set_scale(calibration_factor2);
@@ -258,13 +328,13 @@ void loop() {
     ////////////////////
 
     Serial.println("Measuring the weight.");
-    while(Weight < goal_weight[i]) {
+    while(Weight <= goal_weight[i]) {
        Weight = scale1.get_units() + scale2.get_units();
       //  Serial.println(Weight);
     }
     Serial.print(Weight);
     Serial.println("g");
-    Serial.print("Measuring is over.");
+    Serial.println("Measuring is over.");
 
     if (isLiquid[i]) {
       vacuumMotor(255);

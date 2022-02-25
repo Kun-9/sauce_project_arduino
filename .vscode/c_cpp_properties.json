@@ -17,9 +17,9 @@
             "includePath": [
                 "/Users/kun/Library/Arduino15/packages/arduino/hardware/avr/1.8.4/cores/arduino",
                 "/Users/kun/Library/Arduino15/packages/arduino/hardware/avr/1.8.4/variants/mega",
-                "/Applications/Arduino.app/Contents/Java/libraries/Servo/src",
                 "/Applications/Arduino.app/Contents/Java/libraries/Stepper/src",
                 "/Users/kun/Documents/Arduino/libraries/HX711_library",
+                "/Applications/Arduino.app/Contents/Java/libraries/Servo/src",
                 "/Users/kun/Library/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/lib/gcc/avr/7.3.0/include",
                 "/Users/kun/Library/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/lib/gcc/avr/7.3.0/include-fixed",
                 "/Users/kun/Library/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/avr/include"
