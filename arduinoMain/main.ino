@@ -10,30 +10,44 @@
 // #include <typeinfo>
 // using namespace std;
 
+#define SWITCH 9
 
 #define VACUUM_PIN 13
 #define AIRPUMP_PIN 7
 #define VIBRATION_PIN 30
 
-// loadcell_2
-#define LOADCELL_DOUT_PIN 2
-#define LOADCELL_SCK_PIN 3
+// loadcell_1
+#define LOADCELL_DOUT_PIN 10  
+#define LOADCELL_SCK_PIN 11
 
 // loadcell_2
-#define LOADCELL_DOUT_PIN2 5 
-#define LOADCELL_SCK_PIN2 6 
+#define LOADCELL_DOUT_PIN2 12 
+#define LOADCELL_SCK_PIN2 13 
 
 // ModuleServo
-#define MODULE_SERVO_PIN 8
+#define MODULE_SERVO_PIN 2
 
 // StepMoter
 #define A 9
 #define A_ 10
 #define B 11
 #define B_ 12
+#define PUL 7
+#define DIR 6
+#define ENA 5
 
+// Input String
 String str = "";
 
+/*  
+* source_info[0] = Cartridge number info
+* source_info[1] = Weight info
+* source_info[2] = Liquid info
+*/
+int source_info[3][6];
+
+// Number to Output
+int N;
 
 class customServo {
 private:
@@ -60,18 +74,37 @@ public:
   }
 };
 
-class moveCartridge : public Stepper {
+class moveCartridge {
   private:
     int current_num = 1;
     int move_num;
+    int pul, dir, ena;
     // Stepper shaftStep;
+
   public:
-    moveCartridge(int number_of_steps, int motor_pin_1, int motor_pin_2) 
-                                 : Stepper(number_of_steps, motor_pin_1, motor_pin_2){}       
-    moveCartridge(int number_of_steps, int motor_pin_1, int motor_pin_2, int motor_pin_3, int motor_pin_4) 
-                                 : Stepper(number_of_steps, motor_pin_1, motor_pin_2, motor_pin_3, motor_pin_4){}
-    moveCartridge(int number_of_steps, int motor_pin_1, int motor_pin_2, int motor_pin_3, int motor_pin_4, int motor_pin_5) 
-                                 : Stepper(number_of_steps, motor_pin_1, motor_pin_2, motor_pin_3, motor_pin_4, motor_pin_5){}
+    moveCartridge(int pul, int dir, int ena) {
+      this -> pul = pul;
+      this -> dir = dir;
+      this -> ena = ena;
+    }
+
+    void moveMotor(int step, int speed, String direction) {
+      for (int i=0; i<step; i++)    //Forward 5000 steps
+      {
+        if (direction == "rc") {
+          digitalWrite(dir,HIGH);
+        } else if(direction == "c") {
+          digitalWrite(dir,LOW);
+        } else {
+          exit(1);
+        }
+        digitalWrite(ena,HIGH);
+        digitalWrite(pul,HIGH);
+        delayMicroseconds(speed);
+        digitalWrite(pul,LOW);
+        delayMicroseconds(speed);
+      }
+    }
 
     boolean move(int move_num) {
 
@@ -80,7 +113,7 @@ class moveCartridge : public Stepper {
 
       // move
       for(int i = 0; i < tmp ; i ++) {
-        step(-200/6);
+        moveMotor(266, 1000, "c");
       }
 
       /*
@@ -91,6 +124,23 @@ class moveCartridge : public Stepper {
       Serial.println(move_num);
       this -> current_num = move_num;
       return true;
+    }
+
+    void toStartingPoint(int startCali) {
+      while(1) {
+        moveMotor(1, 2000, "rc");
+        if(digitalRead(SWITCH) == HIGH){
+          break;
+        }
+      }
+      delay(1000);
+      moveMotor(startCali, 2000, "c"); 
+      delay(2000);
+    }
+
+    void sleep() {
+      digitalWrite(ena,LOW);
+      digitalWrite(pul,LOW);
     }
 };
 
@@ -118,6 +168,52 @@ void vibrationMotor(int pwm) {
   analogWrite(VIBRATION_PIN, pwm);
   Serial.print("vibrationMotor value : ");
   Serial.println(pwm);
+}
+
+void parseStr(String Str) {
+  int first = str.indexOf(",");
+  int second = str.indexOf(",", first+1);
+  int third = str.indexOf(",", second+1);
+  int StrLength = str.length();
+
+  int N = str.substring(0, first).toInt();
+  String CartNumStr = str.substring(first+1, second);
+  String WeightStr = str.substring(second+1, third);
+  String LiquidStr = str.substring(third+1, StrLength);
+
+  
+  // Cartrdige number Str parsing
+  for (int i = 0; i < N; i++) {
+  
+    String tmp = (String) CartNumStr.charAt(2*i);
+    source_info[0][i] = tmp.toInt();
+    tmp = (String) LiquidStr.charAt(2*i);
+    source_info[2][i] = tmp.toInt();
+  }
+
+  // WeightStr parsing
+  for (int i = 0; i < N; i++) {
+    String tmp;
+    int index = WeightStr.indexOf(" ");
+    StrLength = WeightStr.length();
+
+    // 공백 전까지 읽고 저장
+    tmp = WeightStr.substring(0,index);
+    
+    source_info[1][i] = tmp.toInt();
+
+    // 읽은 부분 자름
+    WeightStr = WeightStr.substring(index+1,StrLength);
+  }
+
+  // input info array print
+  // Serial.print(N);
+  // for (int i = 0; i < 3; i++) {
+  //     for(int t = 0; t < N; t++) {
+  //       Serial.print(source_info[i][t]);
+  //     }
+  //   Serial.println();
+  // }
 }
 
 class LoadCell {
@@ -148,7 +244,7 @@ class LoadCell {
       Serial.println(" g");
       return sumWeight;
     }
-  };
+};
 
 // LoadCell calibration
 int calibration_factor = -480;
@@ -161,8 +257,8 @@ HX711 scale2;
 
 // down angle, up angle
 Servo servo1;
-customServo moduleServo = customServo(70, 120, servo1);
-moveCartridge movecartridge = moveCartridge(200, A, A_, B, B_) ;
+customServo moduleservo = customServo(70, 120, servo1);
+moveCartridge movecartridge = moveCartridge(PUL, DIR, ENA) ;
 // moveCartridge movecartridge = moveCartridge(200, B_, B, A_, A) ;
 
 
@@ -176,18 +272,21 @@ void setup() {
   pinMode(MODULE_SERVO_PIN, OUTPUT);
   pinMode(AIRPUMP_PIN, OUTPUT);
   pinMode(VACUUM_PIN, OUTPUT);
-
+  pinMode(PUL, OUTPUT);
+  pinMode(DIR, OUTPUT);
+  pinMode(ENA, OUTPUT);
+  pinMode(SWITCH, INPUT);
   // shaftStep.setSpeed(70);
   
   
   // LoadCell1 setting
   scale1.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
-  scale1.set_scale();
+  scale1.set_scale(calibration_factor);
   scale1.tare();
   
   // LoadCell2 setting
   scale2.begin(LOADCELL_DOUT_PIN2, LOADCELL_SCK_PIN2); 
-  scale2.set_scale();
+  scale2.set_scale(calibration_factor2);
   scale2.tare();
   
   // long zero_factor = scale.read_average();
@@ -224,71 +323,104 @@ void setup() {
 // 
 
 void loop() {
-  
-  while(Serial.available() == 0) {
-  }
 
-//  while(Serial.available() != 0){
-    str = Serial.readString();
-    
-//  }
-  Serial.println("end");
-  Serial.println(str);
-
-  
-  // int str2 = Serial.read();
-  // String str= "3 5 7 0 0 0,40 50 20 0 0 0,1 0 1 0 0 0";
-
-  
-
+  //test servo
   /*
+  while (1)
+  {
+    moduleservo.down();
+    delay(1000);
+    moduleservo.up();
+    delay(1000);
+
+  }
+*/ 
+
+  //test
+  while (1)
+  {
+    movecartridge.toStartingPoint(47);
+    movecartridge.move(3);
+    
+    double Weight = 0;
+    scale1.tare();
+    scale2.tare();
+    ////////////////////
+    
+    // Starting weighing
+    while (Weight < 10)
+    {
+      Serial.println("Measuring the weight.");
+      Weight = scale1.get_units() + scale2.get_units();
+      Serial.println(Weight);
+    }
+
+    movecartridge.move(6);
+
+    movecartridge.sleep();
+
+    delay(10000000);
+    
+  }
+  
+
+  // wait String info from rasberry pi
+  while(Serial.available() == 0) {}
+
+  str = Serial.readString();
+
+  // input String parsing
+
   int first = str.indexOf(",");
   int second = str.indexOf(",", first+1);
+  int third = str.indexOf(",", second+1);
   int StrLength = str.length();
 
-  String firstStr = str.substring(0, first);
-  String SecondStr = str.substring(first+1, second);
-  String LastStr = str.substring(second+1, StrLength);
+  int N = str.substring(0, first).toInt();
+  String CartNumStr = str.substring(first+1, second);
+  String WeightStr = str.substring(second+1, third);
+  String LiquidStr = str.substring(third+1, StrLength);
 
-  int source_info[3][6];
   
-
-  for (int i = 0; i < 6; i++) {
+  // Cartrdige number Str parsing
+  for (int i = 0; i < N; i++) {
   
-    char tmp = firstStr.charAt(2*i);
-    
-    source_info[0][i] = tmp;
-    Serial.println(tmp);
+    String tmp = (String) CartNumStr.charAt(2*i);
+    source_info[0][i] = tmp.toInt();
+    tmp = (String) LiquidStr.charAt(2*i);
+    source_info[2][i] = tmp.toInt();
   }
-*/
-  /*
-    int temp = 0;
-    int point = str.indexOf(" ");
-    String tok = SecondStr.substring(0,point);
-    Serial.println(tok);
-    Serial.println(point);
-    int point2 = str.indexOf(" ", point+1);
-    String tok2 = str.substring(point+1, point2);
 
-    Serial.println(tok2);
-    Serial.println(point2);
+  // WeightStr parsing
+  for (int i = 0; i < N; i++) {
+    String tmp;
+    int index = WeightStr.indexOf(" ");
+    StrLength = WeightStr.length();
 
-    temp = point;
-  
-  Serial.println(firstStr);
-  Serial.println(SecondStr);
-  Serial.println(LastStr);
-  */
-  // String str="3 5 7 0 0 0,40 50 20 0 0 0,1 0 1 0 0 0";
+    // 공백 전까지 읽고 저장
+    tmp = WeightStr.substring(0,index);
+    
+    source_info[1][i] = tmp.toInt();
 
+    // 읽은 부분 자름
+    WeightStr = WeightStr.substring(index+1,StrLength);
+  }
 
+  // parseStr(str);  
 
+  Serial.println(N);
+  for (int i = 0; i < 3; i++) {
+      for(int t = 0; t < N; t++) {
+        Serial.print(source_info[i][t]);
+        Serial.print(", "); 
+      }
+    Serial.println();
+  }
 
-  scale1.set_scale(calibration_factor);
-  scale2.set_scale(calibration_factor2);
+  // scale1.set_scale(calibration_factor);
+  // scale2.set_scale(calibration_factor2);
   
   // StepMotor setting
-  movecartridge.setSpeed(70);
 
   // LoadCell loadcell = LoadCell(scale1, scale2, calibration_factor, calibration_factor2);
 
@@ -296,47 +428,55 @@ void loop() {
 
   ///////////////// input value ///////////////////
 
-  int Source_arr[3] = {3, 4, 6};
-  int goal_weight[3] = {30, 10, 50};
-  boolean isLiquid[3] = {true, true, false};
+  // int Source_arr[3] = {3, 4, 6};
+  // int goal_weight[3] = {30, 10, 50};
+  // boolean isLiquid[3] = {true, true, false};
 
-  int n = (int)(sizeof(Source_arr) / sizeof(int));
+  // int n = (int)(sizeof(Source_arr) / sizeof(int));
 
   /////////////////////////////////////////////////
-  for (int i = 0 ; i < n ; i++) {
+  for (int i = 0 ; i < N ; i++) {
 
-    movecartridge.move(Source_arr[i]);
+    // move to cartridge to output
+    movecartridge.move(source_info[0][i]);
     delay(1000);
 
-    moduleServo.down();
+    // Output module coupling
+    moduleservo.down();
     delay(1000);
     
+    // Cover module open
     coverMotor("open");
 
-    if (isLiquid[i]) {
+    // Select output method
+    if (source_info[2][i] == 1) {
       Serial.println("Liquid");
       airpumpMotor(255);
     } else {
       Serial.println("not Liquid");
       vibrationMotor(255);
     }
-
+    
     // Reset LoadCell //
     double Weight = 0;
     scale1.tare();
     scale2.tare();
     ////////////////////
 
+    // Starting weighing
     Serial.println("Measuring the weight.");
-    while(Weight <= goal_weight[i]) {
+    while(Weight <= source_info[1][i]) {
        Weight = scale1.get_units() + scale2.get_units();
       //  Serial.println(Weight);
     }
+
+    // End of weight measurement
     Serial.print(Weight);
     Serial.println("g");
     Serial.println("Measuring is over.");
 
-    if (isLiquid[i]) {
+    // close cover
+    if (source_info[2][i] == 1) {
       vacuumMotor(255);
       airpumpMotor(0);
       coverMotor("close");
@@ -346,7 +486,7 @@ void loop() {
       coverMotor("close");
     }
 
-    moduleServo.up();
+    moduleservo.up();
 
     delay(5000);
   }
