@@ -12,9 +12,20 @@
 
 #define SWITCH 9
 
-#define VACUUM_PIN 13
-#define AIRPUMP_PIN 7
-#define VIBRATION_PIN 30
+#define MAGNET_RELAY 53
+
+#define VACUUM_PIN_1 3
+#define VACUUM_PIN_2 4
+#define VACUUM_PIN_ENA 8
+
+#define AIRPUMP_PIN_1 50
+#define AIRPUMP_PIN_2 51
+#define AIRPUMP_PIN_ENA 52
+
+#define VIBRATION_PIN_ENA 3
+#define VIBRATION_PIN_1 4
+#define VIBRATION_PIN_2 8
+
 
 // loadcell_1
 #define LOADCELL_DOUT_PIN 10  
@@ -26,12 +37,9 @@
 
 // ModuleServo
 #define MODULE_SERVO_PIN 2
+#define MODULE_SERVO_PIN_2 48
 
 // StepMoter
-#define A 9
-#define A_ 10
-#define B 11
-#define B_ 12
 #define PUL 7
 #define DIR 6
 #define ENA 5
@@ -72,6 +80,17 @@ public:
     servo.write(upAngle);
     Serial.println("ModuleServo up");
   }
+
+  void detach() {
+    servo.detach();
+    Serial.println("ModuleServo detach");
+  }
+
+  void attach() {
+    servo.attach(MODULE_SERVO_PIN);
+    Serial.println("ModuleServo attach");
+
+  }
 };
 
 class moveCartridge {
@@ -79,13 +98,14 @@ class moveCartridge {
     int current_num = 1;
     int move_num;
     int pul, dir, ena;
-    // Stepper shaftStep;
+    float errorValue;
 
   public:
     moveCartridge(int pul, int dir, int ena) {
       this -> pul = pul;
       this -> dir = dir;
       this -> ena = ena;
+      this -> errorValue = 0;
     }
 
     void moveMotor(int step, int speed, String direction) {
@@ -107,18 +127,52 @@ class moveCartridge {
     }
 
     boolean move(int move_num) {
-
+      // 한 카트리지 당 266스텝 (59.85도) -0.15도 오차. 한스텝당 0.225도 만약 총 오차 합의 절댓값이 0.225가 넘으면 1스텝 더 움직임
+      //  2     3     4     5     6
+      // -0.15 - 0.3 -0.45 -0.6 -0.75
       this -> move_num = move_num;
+
+      // 움직이는 거리
       int tmp = move_num - current_num;
+
+      // 오차 값 계산      
+      errorValue += tmp * 0.15;
+      
+      Serial.print("tmp : ");
+      Serial.println(tmp);
+
+      Serial.println("////////////////////////////////");
+      Serial.print("현재 오차값 : ");
+      Serial.println(errorValue);
+      
+
+      // 오차를 0.225로 나눈 값 => 더 움직여야 할 스텝 수
+      int calibration = 0;
+
+      if (errorValue > 0.225) {
+        calibration = floor(errorValue / 0.225);
+        Serial.print("<오차 캘리브레이션> ");
+        Serial.print(calibration);
+        Serial.println("스텝 추가 이동");
+
+        // 남은 오차 값 갱신
+        errorValue = errorValue - (calibration * 0.225);  
+        Serial.print("잔여 값 : ");
+        Serial.println(errorValue);
+        Serial.println("////////////////////////////////");
+      }
+            
+
 
       // move
       for(int i = 0; i < tmp ; i ++) {
         moveMotor(266, 1000, "c");
       }
 
-      /*
-        move funtion
-      */
+      for(int i = 0; i < calibration ; i ++) {
+        moveMotor(1, 1000, "c");
+      }
+      
       Serial.print(this -> current_num);
       Serial.print(" to ");
       Serial.println(move_num);
@@ -134,7 +188,7 @@ class moveCartridge {
         }
       }
       delay(1000);
-      moveMotor(startCali, 2000, "c"); 
+      moveMotor(startCali, 3000, "c"); 
       delay(2000);
     }
 
@@ -144,16 +198,22 @@ class moveCartridge {
     }
 };
 
-void vacuumMotor(int pwm) {
-  analogWrite(VACUUM_PIN, pwm);
+void runVacuumMotor(int pwm) {
+  digitalWrite(VACUUM_PIN_1, HIGH);
+  digitalWrite(VACUUM_PIN_2, LOW);
+  analogWrite(VACUUM_PIN_ENA, pwm);
   Serial.print("vacuum Motor value : ");
   Serial.println(pwm);
 }
 
-void airpumpMotor(int pwm) {
-  analogWrite(AIRPUMP_PIN, pwm);
+void runAirMotor(int pwm) {
+
   Serial.print("airpump Motor value : ");
   Serial.println(pwm);
+
+  digitalWrite(AIRPUMP_PIN_1, HIGH);
+  digitalWrite(AIRPUMP_PIN_2, LOW);
+  analogWrite(AIRPUMP_PIN_ENA, pwm);
 }
 
 void coverMotor(String status) {
@@ -164,8 +224,11 @@ void coverMotor(String status) {
   }
 }
 
-void vibrationMotor(int pwm) {
-  analogWrite(VIBRATION_PIN, pwm);
+void runVibrationMotor(int pwm) {
+  digitalWrite(VIBRATION_PIN_1, HIGH);
+  digitalWrite(VIBRATION_PIN_2, LOW);
+  analogWrite(VIBRATION_PIN_ENA, pwm);
+
   Serial.print("vibrationMotor value : ");
   Serial.println(pwm);
 }
@@ -250,16 +313,15 @@ class LoadCell {
 int calibration_factor = -480;
 int calibration_factor2 = -480;
 
-// Stepper shaftStep = Stepper(200, 12, 11, 10, 9);      
-
 HX711 scale1;
 HX711 scale2;
 
 // down angle, up angle
-Servo servo1;
-customServo moduleservo = customServo(70, 120, servo1);
+Servo servo1, servo2;
+
+customServo moduleservo = customServo(75, 124, servo1);
+customServo openerServo = customServo(4, 103, servo2);
 moveCartridge movecartridge = moveCartridge(PUL, DIR, ENA) ;
-// moveCartridge movecartridge = moveCartridge(200, B_, B, A_, A) ;
 
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -269,15 +331,25 @@ void setup() {
 
   // Module servoMotor setting
   servo1.attach(MODULE_SERVO_PIN);
+  servo2.attach(MODULE_SERVO_PIN_2);
+
   pinMode(MODULE_SERVO_PIN, OUTPUT);
-  pinMode(AIRPUMP_PIN, OUTPUT);
-  pinMode(VACUUM_PIN, OUTPUT);
+  pinMode(MODULE_SERVO_PIN_2, OUTPUT);
+  pinMode(MAGNET_RELAY, OUTPUT);
+  pinMode(AIRPUMP_PIN_1, OUTPUT);
+  pinMode(AIRPUMP_PIN_2, OUTPUT);
+  pinMode(AIRPUMP_PIN_ENA, OUTPUT);
+  pinMode(VACUUM_PIN_1, OUTPUT);
+  pinMode(VACUUM_PIN_2, OUTPUT);
+  pinMode(VACUUM_PIN_ENA, OUTPUT);
+  pinMode(VIBRATION_PIN_1,OUTPUT);
+  pinMode(VIBRATION_PIN_2,OUTPUT); 
+  pinMode(VIBRATION_PIN_ENA,OUTPUT);
   pinMode(PUL, OUTPUT);
   pinMode(DIR, OUTPUT);
   pinMode(ENA, OUTPUT);
   pinMode(SWITCH, INPUT);
   // shaftStep.setSpeed(70);
-  
   
   // LoadCell1 setting
   scale1.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
@@ -322,47 +394,150 @@ void setup() {
 // cover servoMotor
 // 
 
+
+
+
+
 void loop() {
 
-  //test servo
-  /*
-  while (1)
-  {
-    moduleservo.down();
-    delay(1000);
-    moduleservo.up();
-    delay(1000);
 
-  }
-*/ 
+  //test openerServo
+  // while (1)
+  // {
+  //   openerServo.down();
+  //   delay(2000);
 
-  //test
-  while (1)
-  {
-    movecartridge.toStartingPoint(47);
-    movecartridge.move(3);
-    
-    double Weight = 0;
-    scale1.tare();
-    scale2.tare();
-    ////////////////////
-    
-    // Starting weighing
-    while (Weight < 10)
-    {
-      Serial.println("Measuring the weight.");
-      Weight = scale1.get_units() + scale2.get_units();
-      Serial.println(Weight);
-    }
-
-    movecartridge.move(6);
-
-    movecartridge.sleep();
-
-    delay(10000000);
-    
-  }
+  //   openerServo.up();
+  //   delay(2000);
+  // }
   
+
+  //test motor
+  // while (1)
+  // {
+  //   digitalWrite(2, HIGH);
+  //   digitalWrite(3, LOW);
+  //   analogWrite(8, 100);
+  // }
+
+  //test ViberationMotor
+  // while (1)
+  // {
+  //   runVibrationMotor(205);
+  //   delay(2000);
+
+  // }
+
+  //test servo
+  // while (1)
+  // {
+  //   moduleservo.up();
+  //   delay(2000);
+
+  //   moduleservo.down();
+  //   delay(2000);
+    
+  //   moduleservo.detach();
+  //   delay(100000);
+  // }
+
+  // test vacum
+  // delay(1000);
+  // moduleservo.down();
+
+  // while (1) {
+  //   runVibrationMotor(255);
+  //   delay(2000);
+  //   runVibrationMotor(0);
+
+  //   runAirMotor(255);
+  //   delay(2000);
+  //   runAirMotor(0);
+  // } 
+
+  // test magnet relay
+
+  // while (1)
+  // {
+  //   digitalWrite(MAGNET_RELAY ,LOW);
+  //   delay(2000);
+  // }
+  
+  
+  // set origin
+
+  moduleservo.up();
+  openerServo.up();
+  digitalWrite(MAGNET_RELAY ,LOW);
+
+  
+  delay(1000);
+
+  movecartridge.toStartingPoint(34);
+
+  /////////////////////////////////////////
+
+  // cycle 1
+
+  movecartridge.move(5);
+
+  delay(1000);
+
+  moduleservo.down();
+  delay(1000);
+  moduleservo.detach();
+  digitalWrite(MAGNET_RELAY ,HIGH);
+  delay(1000);
+
+  // 흡입
+  runVacuumMotor(255);
+  delay(1000);
+
+  openerServo.down();
+  delay(1000);
+
+  runVacuumMotor(0);
+  runAirMotor(200);
+  delay(3000);
+
+  // 출력 중지
+  runAirMotor(0);
+
+  // 흡입
+  runVacuumMotor(255);
+  delay(1000);
+
+  // close
+  openerServo.up();
+  delay(1000);
+
+  // 흡입 정지
+  runVacuumMotor(0);
+  delay(1000);
+
+  // magnet off
+  digitalWrite(MAGNET_RELAY ,LOW);  
+  delay(1000);
+
+  // module servo attach, up
+  moduleservo.attach();
+  delay(500);
+  moduleservo.up();  
+
+
+  delay(3000);
+
+
+ 
+
+  movecartridge.sleep();
+
+  delay(300000);
+  
+  /////////////////////////////////////////////////////
+
+
+
 
   // wait String info from rasberry pi
   while(Serial.available() == 0) {}
@@ -451,10 +626,10 @@ void loop() {
     // Select output method
     if (source_info[2][i] == 1) {
       Serial.println("Liquid");
-      airpumpMotor(255);
+      runAirMotor(255);
     } else {
       Serial.println("not Liquid");
-      vibrationMotor(255);
+      runVibrationMotor(255);
     }
     
     // Reset LoadCell //
@@ -477,12 +652,12 @@ void loop() {
 
     // close cover
     if (source_info[2][i] == 1) {
-      vacuumMotor(255);
-      airpumpMotor(0);
+      runVacuumMotor(255);
+      runAirMotor(0);
       coverMotor("close");
-      vacuumMotor(0);
+      runVacuumMotor(0);
     } else {
-      vibrationMotor(0);
+      runVibrationMotor(0);
       coverMotor("close");
     }
 
