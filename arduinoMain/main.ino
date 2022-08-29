@@ -1,8 +1,13 @@
 #include "stdio.h"
-#include <Stepper.h>
 #include "HX711.h" 
 #include "string.h"
 #include "Servo.h"
+
+#include <SPI.h>
+#include <MFRC522.h>
+#define SS_PIN 53    // spi 통신을 위한 SS(chip select)핀 설정
+#define RST_PIN 5    // 리셋 핀 설정 
+
 // #include <iostream>
 // #include <string>
 // #include <vector>
@@ -12,47 +17,57 @@
 
 #define SWITCH 9
 
-#define MAGNET_RELAY 53
+#define MAGNET_RELAY 41
 
 #define VACUUM_PIN_1 3
 #define VACUUM_PIN_2 4
 #define VACUUM_PIN_ENA 8
 
-#define AIRPUMP_PIN_1 50
-#define AIRPUMP_PIN_2 51
-#define AIRPUMP_PIN_ENA 52
+#define AIRPUMP_PIN_1 42
+#define AIRPUMP_PIN_2 43
+#define AIRPUMP_PIN_ENA 10
 
-#define VIBRATION_PIN_ENA 3
-#define VIBRATION_PIN_1 4
-#define VIBRATION_PIN_2 8
+#define VIBRATION_PIN_1 22
+#define VIBRATION_PIN_2 23
+#define VIBRATION_PIN_ENA 11
 
 
 // loadcell_1
-#define LOADCELL_DOUT_PIN 10  
-#define LOADCELL_SCK_PIN 11
+#define LOADCELL_DOUT_PIN 30  
+#define LOADCELL_SCK_PIN 31
 
 // loadcell_2
-#define LOADCELL_DOUT_PIN2 12 
-#define LOADCELL_SCK_PIN2 13 
+#define LOADCELL_DOUT_PIN2 32 
+#define LOADCELL_SCK_PIN2 33 
 
 // ModuleServo
-#define MODULE_SERVO_PIN 2
-#define MODULE_SERVO_PIN_2 48
+#define OUTPUT_SERVO_PIN 24
+#define CLOSE_SERVO_PIN 44
 
 // StepMoter
 #define PUL 7
 #define DIR 6
-#define ENA 5
+#define ENA 2
+
+// Setting
+#define START_CALIBRATION 30
+
+
+#define OUTPUT_DOWN 74
+#define CLOSE_CLOSE 4
+
+#define OUTPUT_UP 124
+#define CLOSE_OPEN 103
 
 // Input String
 String str = "";
 
 /*  
-* source_info[0] = Cartridge number info
-* source_info[1] = Weight info
-* source_info[2] = Liquid info
+* sauce_info[0] = Cartridge number info
+* sauce_info[1] = Weight info
+* sauce_info[2] = Liquid info
 */
-int source_info[3][6];
+int sauce_info[3][6];
 
 // Number to Output
 int N;
@@ -73,23 +88,32 @@ public:
 
   void down() {
     servo.write(downAngle);
-    Serial.println("ModuleServo down");
+    Serial.println("0 OutputServo down");
   }
 
   void up() {
     servo.write(upAngle);
-    Serial.println("ModuleServo up");
+    Serial.println("0 OutputServo up");
+  }
+
+  void close() {
+    servo.write(downAngle);
+    Serial.println("0 closeServo close");
+  }
+
+  void open() {
+    servo.write(upAngle);
+    Serial.println("0 closeServo open");
   }
 
   void detach() {
     servo.detach();
-    Serial.println("ModuleServo detach");
+    Serial.println("0 OutputServo detach");
   }
 
   void attach() {
-    servo.attach(MODULE_SERVO_PIN);
-    Serial.println("ModuleServo attach");
-
+    servo.attach(OUTPUT_SERVO_PIN);
+    Serial.println("0 OutputServo attach");
   }
 };
 
@@ -138,41 +162,51 @@ class moveCartridge {
       // 오차 값 계산      
       errorValue += tmp * 0.15;
       
-      Serial.print("tmp : ");
-      Serial.println(tmp);
+      // Serial.print("0 tmp : ");
+      // Serial.println(tmp);
 
-      Serial.println("////////////////////////////////");
-      Serial.print("현재 오차값 : ");
+      Serial.println("0 ////////////////////////////////");
+      Serial.print("0 현재 오차값 : ");
       Serial.println(errorValue);
       
 
       // 오차를 0.225로 나눈 값 => 더 움직여야 할 스텝 수
       int calibration = 0;
 
-      if (errorValue > 0.225) {
-        calibration = floor(errorValue / 0.225);
-        Serial.print("<오차 캘리브레이션> ");
-        Serial.print(calibration);
-        Serial.println("스텝 추가 이동");
-
-        // 남은 오차 값 갱신
-        errorValue = errorValue - (calibration * 0.225);  
-        Serial.print("잔여 값 : ");
+      while (abs(errorValue - 0.255) < 0.13) {
+        errorValue -= 0.255;
+        Serial.print("0 오차값 : ");
         Serial.println(errorValue);
-        Serial.println("////////////////////////////////");
+
+        calibration++;        
+        Serial.print("0 이동 할 스텝 값 : ");
+        Serial.println(calibration);
       }
+
+      // if (errorValue > 0.225) {
+      //   calibration = floor(errorValue / 0.225);
+      //   Serial.print("0 <오차 캘리브레이션> ");
+      //   Serial.print(calibration);
+      //   Serial.println("스텝 추가 이동");
+
+      //   // 남은 오차 값 갱신
+      //   errorValue = errorValue - (calibration * 0.225);  
+      //   Serial.print("0 잔여 값 : ");
+      //   Serial.println(errorValue);
+      //   Serial.println("0 ////////////////////////////////");
+      //   Serial.println("0 ");
+      // }
             
-
-
       // move
       for(int i = 0; i < tmp ; i ++) {
-        moveMotor(266, 1000, "c");
+        moveMotor(266, 1500, "c");
       }
 
       for(int i = 0; i < calibration ; i ++) {
-        moveMotor(1, 1000, "c");
+        moveMotor(1, 1500, "c");
       }
       
+      Serial.print("0 ");
       Serial.print(this -> current_num);
       Serial.print(" to ");
       Serial.println(move_num);
@@ -189,12 +223,16 @@ class moveCartridge {
       }
       delay(1000);
       moveMotor(startCali, 3000, "c"); 
-      delay(2000);
+
     }
 
     void sleep() {
       digitalWrite(ena,LOW);
       digitalWrite(pul,LOW);
+    }
+    
+    void resetCartNum() {
+      this -> current_num = 1;
     }
 };
 
@@ -202,13 +240,13 @@ void runVacuumMotor(int pwm) {
   digitalWrite(VACUUM_PIN_1, HIGH);
   digitalWrite(VACUUM_PIN_2, LOW);
   analogWrite(VACUUM_PIN_ENA, pwm);
-  Serial.print("vacuum Motor value : ");
+  Serial.print("0 vacuum Motor value : ");
   Serial.println(pwm);
 }
 
 void runAirMotor(int pwm) {
 
-  Serial.print("airpump Motor value : ");
+  Serial.print("0 airpump Motor value : ");
   Serial.println(pwm);
 
   digitalWrite(AIRPUMP_PIN_1, HIGH);
@@ -216,11 +254,28 @@ void runAirMotor(int pwm) {
   analogWrite(AIRPUMP_PIN_ENA, pwm);
 }
 
+class Magnet {
+  private:
+    
+  public:
+    void on() {
+      digitalWrite(MAGNET_RELAY, HIGH);   
+      Serial.println("0 magent on");
+    }
+
+    void off() {
+      digitalWrite(MAGNET_RELAY, LOW);
+      Serial.println("0 magnet off"); 
+  }
+};
+
 void coverMotor(String status) {
   if (status == "open") {
-    Serial.println("coverMotor status : open");
+
+    Serial.println("0 coverMotor status : open");
   } else {
-    Serial.println("coverMotor status : close");
+
+    Serial.println("0 coverMotor status : close");
   }
 }
 
@@ -229,29 +284,53 @@ void runVibrationMotor(int pwm) {
   digitalWrite(VIBRATION_PIN_2, LOW);
   analogWrite(VIBRATION_PIN_ENA, pwm);
 
-  Serial.print("vibrationMotor value : ");
+  Serial.print("0 vibrationMotor value : ");
   Serial.println(pwm);
 }
 
-void parseStr(String Str) {
+int parseInputString() {
+  
+  str = Serial.readString();
+
+  // input String parsing
   int first = str.indexOf(",");
   int second = str.indexOf(",", first+1);
   int third = str.indexOf(",", second+1);
   int StrLength = str.length();
 
+  Serial.print("0 ");
+  Serial.print(first);
+  Serial.print(", ");
+  Serial.print(second);
+  Serial.print(", ");
+  Serial.println(third);
+
+
+
   int N = str.substring(0, first).toInt();
+
+  // N이 0이라면 N을 리턴하고 종료
+  if (!N) { return N; }
+
   String CartNumStr = str.substring(first+1, second);
   String WeightStr = str.substring(second+1, third);
   String LiquidStr = str.substring(third+1, StrLength);
 
+  Serial.print("0 ");
+  Serial.print(CartNumStr);
+  Serial.print(", ");
+  Serial.print(WeightStr);
+  Serial.print(", ");
+  Serial.println(LiquidStr);
+
+
   
   // Cartrdige number Str parsing
   for (int i = 0; i < N; i++) {
-  
     String tmp = (String) CartNumStr.charAt(2*i);
-    source_info[0][i] = tmp.toInt();
+    sauce_info[0][i] = tmp.toInt();
     tmp = (String) LiquidStr.charAt(2*i);
-    source_info[2][i] = tmp.toInt();
+    sauce_info[2][i] = tmp.toInt();
   }
 
   // WeightStr parsing
@@ -262,52 +341,51 @@ void parseStr(String Str) {
 
     // 공백 전까지 읽고 저장
     tmp = WeightStr.substring(0,index);
-    
-    source_info[1][i] = tmp.toInt();
+    if (tmp == " ") {
+      tmp == "0";
+    }
+    sauce_info[1][i] = tmp.toInt();
 
     // 읽은 부분 자름
     WeightStr = WeightStr.substring(index+1,StrLength);
   }
 
-  // input info array print
-  // Serial.print(N);
+  // parseStr(str);  
+
+
+  // Serial.print("0 ");
   // for (int i = 0; i < 3; i++) {
   //     for(int t = 0; t < N; t++) {
-  //       Serial.print(source_info[i][t]);
+  //       Serial.print(sauce_info[i][t]);
+  //       Serial.print(", "); 
   //     }
   //   Serial.println();
   // }
+
+  return N;
 }
 
-class LoadCell {
-  private:
-    int calibration_factor;
-    int calibration_factor2;
-    HX711 scale1;
-    HX711 scale2;
+// ID to hexadecimal number
+void printHex(byte *buffer, byte bufferSize) {
+  Serial.print("1 ");
+  for (byte i = 0; i < bufferSize; i++) {
+    Serial.print(buffer[i] < 0x10 ? " 0" : " ");
+    Serial.print(buffer[i], HEX);
+  }
+}
 
-  public:
-    LoadCell(HX711 scale1, HX711 scale2, int calibration_factor, int calibration_factor2) {
-      this -> scale1 = scale1;
-      this -> scale2 = scale2;
-      scale1.tare();
-      scale2.tare();
-    }
+// ID to decimal number
+void printDec(byte *buffer, byte bufferSize) {
+  for (byte i = 0; i < bufferSize; i++) {
+    Serial.print(buffer[i] < 0x10 ? " 0" : " ");
+    Serial.print(buffer[i], DEC);
+  }
+}
 
-    void tare() {
-      scale1.tare();
-      scale2.tare();
-    }
 
-    double getWeight() {
-      scale1.set_scale(calibration_factor);
-      scale2.set_scale(calibration_factor2);
-      double sumWeight = scale1.get_units() + scale2.get_units();
-      Serial.print(sumWeight);
-      Serial.println(" g");
-      return sumWeight;
-    }
-};
+MFRC522 rfid(SS_PIN, RST_PIN); // 'rfid' 이름으로 클래스 객체 선언
+MFRC522::MIFARE_Key key; 
+byte nuidPICC[4];   // 카드 ID들을 저장(비교)하기 위한 배열(변수)선언
 
 // LoadCell calibration
 int calibration_factor = -480;
@@ -317,24 +395,29 @@ HX711 scale1;
 HX711 scale2;
 
 // down angle, up angle
-Servo servo1, servo2;
-
-customServo moduleservo = customServo(75, 124, servo1);
-customServo openerServo = customServo(4, 103, servo2);
+Servo outputServo, closeServo;
+customServo outputModule = customServo(OUTPUT_DOWN, OUTPUT_UP, outputServo);
+customServo closeModule = customServo(CLOSE_OPEN, CLOSE_CLOSE, closeServo);
 moveCartridge movecartridge = moveCartridge(PUL, DIR, ENA) ;
-
+Magnet magnet;
 
 //////////////////////////////////////////////////////////////////////////////////
 void setup() {
   // Serial setting
   Serial.begin(9600);          
+  SPI.begin();
+  rfid.PCD_Init();
+  // ID reset
+  for (byte i = 0; i < 6; i++) {
+    key.keyByte[i] = 0xFF;
+  }
 
   // Module servoMotor setting
-  servo1.attach(MODULE_SERVO_PIN);
-  servo2.attach(MODULE_SERVO_PIN_2);
+  outputServo.attach(OUTPUT_SERVO_PIN);
+  closeServo.attach(CLOSE_SERVO_PIN);
 
-  pinMode(MODULE_SERVO_PIN, OUTPUT);
-  pinMode(MODULE_SERVO_PIN_2, OUTPUT);
+  pinMode(OUTPUT_SERVO_PIN, OUTPUT);
+  pinMode(CLOSE_SERVO_PIN, OUTPUT);
   pinMode(MAGNET_RELAY, OUTPUT);
   pinMode(AIRPUMP_PIN_1, OUTPUT);
   pinMode(AIRPUMP_PIN_2, OUTPUT);
@@ -349,7 +432,7 @@ void setup() {
   pinMode(DIR, OUTPUT);
   pinMode(ENA, OUTPUT);
   pinMode(SWITCH, INPUT);
-  // shaftStep.setSpeed(70);
+
   
   // LoadCell1 setting
   scale1.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
@@ -361,315 +444,273 @@ void setup() {
   scale2.set_scale(calibration_factor2);
   scale2.tare();
   
-  // long zero_factor = scale.read_average();
-  // Serial.print("Zero factor: ");
-  // Serial.println(zero_factor);
+  outputModule.up();
+  closeModule.close();
+  magnet.off();
+  movecartridge.sleep();
+  // movecartridge.toStartingPoint(START_CALIBRATION);
+
 }
 
-// shaftStep.step(-200/6);
-// turn counterclockwise 60 degrees.
+
+
 /*
  *
  *  1. 시리얼 입력이 있을때 까지 대기
  *  2. 입력정보 (n번 카트리지 m(g)출력 정보 6개) 해석
  *  3. 출력, 진행상황 시리얼 송신
  * 
- *  현재 카트리지에서 n번째 카트리지로 이동하려면 [ -200/6 * (이동할 카트리지 번호 - 현재 카트리지 번호) ]
- *  1 -> 2번 카트리지 -200/6 * 1 만큼 회전
- *  1 -> 3번 카트리지 -200/6 * 2 만큼 회전 
+ *  현재 카트리지에서 n번째 카트리지로 이동하려면 [ -1600/6 * (이동할 카트리지 번호 - 현재 카트리지 번호) ]
+ *  1 -> 2번 카트리지 -1600/6 * 1 만큼 회전
+ *  1 -> 3번 카트리지 -1600/6 * 2 만큼 회전 
  *
  */
 
 
-// 입력 개수 n개 
-// 3 -> 5 -> 6 번째 칸
-
-// *** Implemented funtions ***
-// module servoMotor
-// shaft stepMotor
-// loadcell
-// vucuum, airpumpMotor motor
-// vibration motor
-// ----------------------------
-// cover servoMotor
-// 
-
-
-
-
-
+/////////////////////////////////////////////////////////////////////////////////////////
 void loop() {
 
-
-  //test openerServo
-  // while (1)
-  // {
-  //   openerServo.down();
-  //   delay(2000);
-
-  //   openerServo.up();
-  //   delay(2000);
-  // }
   
-
-  //test motor
-  // while (1)
-  // {
-  //   digitalWrite(2, HIGH);
-  //   digitalWrite(3, LOW);
-  //   analogWrite(8, 100);
-  // }
-
-  //test ViberationMotor
-  // while (1)
-  // {
-  //   runVibrationMotor(205);
-  //   delay(2000);
-
-  // }
-
-  //test servo
-  // while (1)
-  // {
-  //   moduleservo.up();
-  //   delay(2000);
-
-  //   moduleservo.down();
-  //   delay(2000);
-    
-  //   moduleservo.detach();
-  //   delay(100000);
-  // }
-
-  // test vacum
-  // delay(1000);
-  // moduleservo.down();
-
-  // while (1) {
-  //   runVibrationMotor(255);
-  //   delay(2000);
-  //   runVibrationMotor(0);
-
-  //   runAirMotor(255);
-  //   delay(2000);
-  //   runAirMotor(0);
-  // } 
-
-  // test magnet relay
-
-  // while (1)
-  // {
-  //   digitalWrite(MAGNET_RELAY ,LOW);
-  //   delay(2000);
-  // }
-  
-  
-  // set origin
-
-  moduleservo.up();
-  openerServo.up();
-  digitalWrite(MAGNET_RELAY ,LOW);
-
-  
-  delay(1000);
-
-  movecartridge.toStartingPoint(34);
-
-  /////////////////////////////////////////
-
-  // cycle 1
-
-  movecartridge.move(5);
-
-  delay(1000);
-
-  moduleservo.down();
-  delay(1000);
-  moduleservo.detach();
-  digitalWrite(MAGNET_RELAY ,HIGH);
-  delay(1000);
-
-  // 흡입
-  runVacuumMotor(255);
-  delay(1000);
-
-  openerServo.down();
-  delay(1000);
-
-  runVacuumMotor(0);
-  runAirMotor(200);
-  delay(3000);
-
-  // 출력 중지
-  runAirMotor(0);
-
-  // 흡입
-  runVacuumMotor(255);
-  delay(1000);
-
-  // close
-  openerServo.up();
-  delay(1000);
-
-  // 흡입 정지
-  runVacuumMotor(0);
-  delay(1000);
-
-  // magnet off
-  digitalWrite(MAGNET_RELAY ,LOW);  
-  delay(1000);
-
-  // module servo attach, up
-  moduleservo.attach();
-  delay(500);
-  moduleservo.up();  
-
-
-  delay(3000);
-
-
- 
-
-  movecartridge.sleep();
-
-  delay(300000);
-  
-  /////////////////////////////////////////////////////
-
-
-
 
   // wait String info from rasberry pi
   while(Serial.available() == 0) {}
 
   str = Serial.readString();
 
-  // input String parsing
-
+  // input String parsing start
   int first = str.indexOf(",");
-  int second = str.indexOf(",", first+1);
-  int third = str.indexOf(",", second+1);
-  int StrLength = str.length();
-
   int N = str.substring(0, first).toInt();
-  String CartNumStr = str.substring(first+1, second);
-  String WeightStr = str.substring(second+1, third);
-  String LiquidStr = str.substring(third+1, StrLength);
 
-  
-  // Cartrdige number Str parsing
-  for (int i = 0; i < N; i++) {
-  
-    String tmp = (String) CartNumStr.charAt(2*i);
-    source_info[0][i] = tmp.toInt();
-    tmp = (String) LiquidStr.charAt(2*i);
-    source_info[2][i] = tmp.toInt();
-  }
+  // if N>0, then edit saucelist
+  if (N) {
+    int second = str.indexOf(",", first+1);
+    int third = str.indexOf(",", second+1);
+    int StrLength = str.length();
 
-  // WeightStr parsing
-  for (int i = 0; i < N; i++) {
-    String tmp;
-    int index = WeightStr.indexOf(" ");
-    StrLength = WeightStr.length();
+    String CartNumStr = str.substring(first+1, second);
+    String WeightStr = str.substring(second+1, third);
+    String LiquidStr = str.substring(third+1, StrLength);
 
-    // 공백 전까지 읽고 저장
-    tmp = WeightStr.substring(0,index);
-    
-    source_info[1][i] = tmp.toInt();
+    // Cartrdige number Str parsing
+    for (int i = 0; i < N; i++) {
+      String tmp = (String) CartNumStr.charAt(2*i);
+      sauce_info[0][i] = tmp.toInt();
+      tmp = (String) LiquidStr.charAt(2*i);
+      sauce_info[2][i] = tmp.toInt();
+    }
 
-    // 읽은 부분 자름
-    WeightStr = WeightStr.substring(index+1,StrLength);
-  }
+    // WeightStr parsing
+    for (int i = 0; i < N; i++) {
+      String tmp;
+      int index = WeightStr.indexOf(" ");
+      StrLength = WeightStr.length();
 
-  // parseStr(str);  
-
-  Serial.println(N);
-  for (int i = 0; i < 3; i++) {
-      for(int t = 0; t < N; t++) {
-        Serial.print(source_info[i][t]);
-        Serial.print(", "); 
+      // 공백 전까지 읽고 저장
+      tmp = WeightStr.substring(0,index);
+      if (tmp == " ") {
+        tmp == "0";
       }
-    Serial.println();
-  }
+      sauce_info[1][i] = tmp.toInt();
 
-  // scale1.set_scale(calibration_factor);
-  // scale2.set_scale(calibration_factor2);
-  
-  // StepMotor setting
-
-  // LoadCell loadcell = LoadCell(scale1, scale2, calibration_factor, calibration_factor2);
-
-  ////////////////////////// start /////////////////////////////////////////
-
-  ///////////////// input value ///////////////////
-
-  // int Source_arr[3] = {3, 4, 6};
-  // int goal_weight[3] = {30, 10, 50};
-  // boolean isLiquid[3] = {true, true, false};
-
-  // int n = (int)(sizeof(Source_arr) / sizeof(int));
-
-  /////////////////////////////////////////////////
-  for (int i = 0 ; i < N ; i++) {
-
-    // move to cartridge to output
-    movecartridge.move(source_info[0][i]);
-    delay(1000);
-
-    // Output module coupling
-    moduleservo.down();
-    delay(1000);
-    
-    // Cover module open
-    coverMotor("open");
-
-    // Select output method
-    if (source_info[2][i] == 1) {
-      Serial.println("Liquid");
-      runAirMotor(255);
-    } else {
-      Serial.println("not Liquid");
-      runVibrationMotor(255);
-    }
-    
-    // Reset LoadCell //
-    double Weight = 0;
-    scale1.tare();
-    scale2.tare();
-    ////////////////////
-
-    // Starting weighing
-    Serial.println("Measuring the weight.");
-    while(Weight <= source_info[1][i]) {
-       Weight = scale1.get_units() + scale2.get_units();
-      //  Serial.println(Weight);
+      // 읽은 부분 자름
+      WeightStr = WeightStr.substring(index+1,StrLength);
     }
 
-    // End of weight measurement
-    Serial.print(Weight);
-    Serial.println("g");
-    Serial.println("Measuring is over.");
+    Serial.print("0 Arduino Input : | ");
+    for (int i = 0; i < 3; i++) {
+        for(int t = 0; t < N; t++) {
+          Serial.print(sauce_info[i][t]);
+          Serial.print(" "); 
+        }
+        Serial.print(" | "); 
+    }
+    Serial.println("");
 
-    // close cover
-    if (source_info[2][i] == 1) {
+    // MainPrintProcess
+    movecartridge.toStartingPoint(START_CALIBRATION);
+
+    for (int i = 0 ; i < N ; i++) {
+      if (sauce_info[1][i] == 0) {
+        continue;
+      }
+      // move to cartridge to output
+      movecartridge.move(sauce_info[0][i]);
+      delay(1000);
+
+      // Output module coupling
+      outputModule.down();
+      delay(1000);
+
+      // Output module detach and magnet on
+      outputModule.detach();
+      magnet.on();
+      delay(1000);
+
+      // vacuum motor on
       runVacuumMotor(255);
-      runAirMotor(0);
-      coverMotor("close");
+      delay(1000);
+
+      // Cover module open
+      closeModule.open();
+      delay(1000);
+
       runVacuumMotor(0);
-    } else {
-      runVibrationMotor(0);
-      coverMotor("close");
+
+      // Select output method
+      if (sauce_info[2][i] == 1) {
+        Serial.println("0 Liquid");
+        runAirMotor(255);
+      } else {
+        Serial.println("0 not Liquid");
+        runVibrationMotor(255);
+      }
+      
+      // Reset LoadCell //
+      double Weight = 0;
+      scale1.tare();
+      scale2.tare();
+      ////////////////////
+
+      // Starting weighing
+      Serial.println("0 Measuring the weight.");
+      while(Weight <= sauce_info[1][i]) {
+        Weight = scale1.get_units() + scale2.get_units();
+        //  Serial.println(Weight);
+      }
+
+      // End of weight measurement
+      Serial.print("0 ");
+      Serial.print(Weight);
+      Serial.println("g");
+      Serial.println("0 Measuring is over.");
+
+      // close cover
+      if (sauce_info[2][i] == 1) {
+        runVacuumMotor(255);
+        runAirMotor(0);
+        delay(1000);
+
+        closeModule.close();
+        runVacuumMotor(0);
+      } else {
+        runVibrationMotor(0);
+        delay(1000);
+
+        closeModule.close();
+      }
+
+      // Magnet off
+      magnet.off();
+      delay(1000);
+
+      // Output module up
+      outputModule.attach();
+      delay(500);
+      outputModule.up();
+
+      delay(2000);
     }
 
-    moduleservo.up();
+    Serial.println("0 End cycle");
+    movecartridge.resetCartNum();
 
-    delay(5000);
+  } else {
+
+    // if N == 0 then, start sauce scan
+    startScan();
+    
   }
 
-  movecartridge.move(1);
-
-  Serial.println("End cycle");
-  delay(5000);
-
+  delay(2000);
+  movecartridge.sleep();
 }
 
+
+// Sauce Scan Method
+void startScan() {
+  String id[6][4]; 
+  movecartridge.toStartingPoint(START_CALIBRATION);
+  for (int i = 0; i < 6; i++) {
+
+    movecartridge.move(i+1);
+    // delay(1000);
+    int check = 0;
+    int cnt = 0;
+    while (1)
+    {
+      // delay(10);
+      cnt++;
+      if (cnt > 5) break;
+
+      // 새카드 접촉이 있을 때만 다음 단계로 넘어감
+      if ( ! rfid.PICC_IsNewCardPresent())
+        continue;
+        // break;
+
+      // 카드 읽힘이 제대로 되면 다음으로 넘어감
+      if ( ! rfid.PICC_ReadCardSerial())
+        continue;
+        // break;
+      // 현재 접촉 되는 카드 타입을 읽어와 모니터에 표시함
+      Serial.print(F("PICC type: "));
+      MFRC522::PICC_Type piccType = rfid.PICC_GetType(rfid.uid.sak);
+      Serial.println(rfid.PICC_GetTypeName(piccType));
+      // MIFARE 방식의 카드인지 확인 루틴
+      if (piccType != MFRC522::PICC_TYPE_MIFARE_MINI && 
+        piccType != MFRC522::PICC_TYPE_MIFARE_1K &&
+        piccType != MFRC522::PICC_TYPE_MIFARE_4K) {
+        Serial.println(F("Your tag is not of type MIFARE Classic."));
+        return;
+      }
+      
+      // 이전 인식된 카드와 다른, 혹은 새카드가 인식되면
+      if (rfid.uid.uidByte[0] != nuidPICC[0] ||
+        rfid.uid.uidByte[1] != nuidPICC[1] ||
+        rfid.uid.uidByte[2] != nuidPICC[2] ||
+        rfid.uid.uidByte[3] != nuidPICC[3] ) {
+        Serial.println(F("A new card has been detected."));
+        
+      // 고유아이디(UID) 값을 저장한다.
+        for (byte i = 0; i < 4; i++) {
+          nuidPICC[i] = rfid.uid.uidByte[i];
+        }
+        check = 1;
+
+        break;
+      }
+ 
+      // 연속으로 동일한 카드를 접촉하면 다른 처리 없이
+      // '이미 인식된 카드'라는 메세지를 출력한다.
+      else Serial.println(F("Card read previously."));
+      rfid.PICC_HaltA();
+      rfid.PCD_StopCrypto1();
+    }
+    Serial.print("0 end scan : ");
+    Serial.println(i+1);
+
+    if(check) {
+      for (int j = 0; j < 4; j ++) {
+        id[i][j] = rfid.uid.uidByte[j];
+        Serial.println("scan");
+      }          
+    } else {
+      for (int j = 0; j < 4; j ++) {
+        id[i][j] = "0";
+      }          
+    }    
+  }
+
+  Serial.println("1");
+  for (int i = 0; i < 6; i++) {
+    for (int j = 0; j < 4; j++) {
+      Serial.print(id[i][j]);
+      Serial.print(" ");
+    }
+    Serial.println("");
+  }
+}
+
+
+// 2,5 6 ,5 12 ,1 1
+// 3,2 5 6 ,5 5 12 ,1 1 1
+// 5,2 3 4 5 6 ,5 5 5 5 5 ,1 1 1 1 1
